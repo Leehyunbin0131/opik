@@ -15,6 +15,7 @@ import {
   ChevronRight,
   SparklesIcon,
   UserPen,
+  Zap,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -43,6 +44,7 @@ import SidebarMenuItem, {
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 
 const HOME_PATH = "/$workspaceName/home";
 
@@ -94,14 +96,6 @@ const MENU_ITEMS: MenuItemGroup[] = [
         count: "experiments",
       },
       {
-        id: "optimizations",
-        path: "/$workspaceName/optimizations",
-        type: MENU_ITEM_TYPE.router,
-        icon: SparklesIcon,
-        label: "Optimization runs",
-        count: "optimizations",
-      },
-      {
         id: "datasets",
         path: "/$workspaceName/datasets",
         type: MENU_ITEM_TYPE.router,
@@ -137,6 +131,29 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: Blocks,
         label: "Playground",
+      },
+    ],
+  },
+  {
+    id: "optimization",
+    label: "Optimization",
+    items: [
+      {
+        id: "optimization_studio",
+        path: "/$workspaceName/optimization-studio",
+        type: MENU_ITEM_TYPE.router,
+        icon: Zap,
+        label: "Optimization studio",
+        showIndicator: "running_optimizations",
+        // featureFlag: FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED, TODO lala uncomment
+      },
+      {
+        id: "optimizations",
+        path: "/$workspaceName/optimizations",
+        type: MENU_ITEM_TYPE.router,
+        icon: SparklesIcon,
+        label: "Optimization runs",
+        count: "optimizations",
       },
     ],
   },
@@ -255,6 +272,19 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: runningOptimizationsData } = useOptimizationsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+      filters: ACTIVE_OPTIMIZATION_FILTER,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded,
+    },
+  );
+
   const { data: annotationQueuesData } = useAnnotationQueuesList(
     {
       workspaceName,
@@ -290,6 +320,11 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     alerts: alertsData?.total,
   };
 
+  const indicatorDataMap: Record<string, boolean> = {
+    running_optimizations:
+      !!runningOptimizationsData?.total && runningOptimizationsData.total > 0,
+  };
+
   const logo = LogoComponent ? (
     <LogoComponent expanded={expanded} />
   ) : (
@@ -303,6 +338,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         item={item}
         expanded={expanded}
         count={countDataMap[item.count!]}
+        hasIndicator={indicatorDataMap[item.showIndicator!]}
       />
     ));
   };
