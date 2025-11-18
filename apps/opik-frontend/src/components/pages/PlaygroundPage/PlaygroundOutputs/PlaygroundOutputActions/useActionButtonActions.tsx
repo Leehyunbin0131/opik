@@ -1,19 +1,29 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { PROJECTS_KEY } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
-import { usePromptIds, useResetOutputMap } from "@/store/PlaygroundStore";
+import {
+  usePromptIds,
+  useResetOutputMap,
+  useSelectedRuleIds,
+  useCreatedExperiments,
+  useSetCreatedExperiments,
+  useClearCreatedExperiments,
+  useIsRunning,
+  useSetIsRunning,
+} from "@/store/PlaygroundStore";
 
 import { useToast } from "@/components/ui/use-toast";
 import createLogPlaygroundProcessor, {
   LogProcessorArgs,
+  TraceMapping,
 } from "@/api/playground/createLogPlaygroundProcessor";
 import usePromptDatasetItemCombination from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/usePromptDatasetItemCombination";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
-import { ToastAction } from "@/components/ui/toast";
+import { useUpdateOutputTraceId } from "@/store/PlaygroundStore";
 
 const LIMIT_STREAMING_CALLS = 5;
 
@@ -40,70 +50,51 @@ const useActionButtonActions = ({
 
   const { toast } = useToast();
 
-  const [isRunning, setIsRunning] = useState(false);
-  const [isToStop, setIsToStop] = useState(false);
+  const isRunning = useIsRunning();
+  const setIsRunning = useSetIsRunning();
+  const isToStopRef = useRef(false);
+  const createdExperiments = useCreatedExperiments();
+  const setCreatedExperiments = useSetCreatedExperiments();
+  const clearCreatedExperiments = useClearCreatedExperiments();
   const promptIds = usePromptIds();
+  const selectedRuleIds = useSelectedRuleIds();
   const abortControllersRef = useRef(new Map<string, AbortController>());
 
   const resetOutputMap = useResetOutputMap();
+  const updateOutputTraceId = useUpdateOutputTraceId();
 
   const resetState = useCallback(() => {
     resetOutputMap();
     abortControllersRef.current.clear();
     setIsRunning(false);
-  }, [resetOutputMap]);
+    clearCreatedExperiments();
+  }, [resetOutputMap, clearCreatedExperiments, setIsRunning]);
 
   const stopAll = useCallback(() => {
+    setIsRunning(false);
     // nothing to stop
     if (abortControllersRef.current.size === 0) {
       return;
     }
 
-    setIsToStop(true);
+    isToStopRef.current = true;
     abortControllersRef.current.forEach((controller) => controller.abort());
-
     abortControllersRef.current.clear();
-  }, []);
+  }, [setIsRunning]);
 
-  const showMessageExperimentsLogged = useCallback(
+  const storeExperiments = useCallback(
     (experiments: LogExperiment[]) => {
-      const title =
-        experiments.length === 1 ? "Experiment started" : "Experiments started";
-
-      toast({
-        title,
-        description:
-          "Analyze the results to identify strengths and weaknesses, then iterate by refining prompts, datasets, or evaluation rules to optimize your LLM application's performance.",
-        actions: [
-          <ToastAction
-            variant="link"
-            size="sm"
-            className="px-0"
-            altText="Go to experiment"
-            key="Go to experiment"
-            onClick={() => {
-              navigate({
-                experimentIds: experiments.map((e) => e.id),
-                datasetId: datasetId,
-              });
-            }}
-          >
-            {experiments.length === 1
-              ? "Go to experiment"
-              : "Compare experiments"}
-          </ToastAction>,
-        ],
-      });
+      setCreatedExperiments(experiments);
     },
-    [datasetId, navigate, toast],
+    [setCreatedExperiments],
   );
 
   const logProcessorHandlers: LogProcessorArgs = useMemo(() => {
     return {
       onAddExperimentRegistry: (experiments) => {
-        // to check if all experiments have been created
+        // Only store experiments when all have been created
         if (experiments.length === promptIds.length) {
-          showMessageExperimentsLogged(experiments);
+          storeExperiments(experiments);
           queryClient.invalidateQueries({
             queryKey: ["experiments"],
           });
@@ -116,13 +107,28 @@ const useActionButtonActions = ({
           description: e.message,
         });
       },
-      onCreateTraces: () => {
+      onCreateTraces: (traces, mappings: TraceMapping[]) => {
+        // Store trace IDs in the output map
+        mappings.forEach((mapping) => {
+          updateOutputTraceId(
+            mapping.promptId,
+            mapping.datasetItemId || "",
+            mapping.traceId,
+          );
+        });
+
         queryClient.invalidateQueries({
           queryKey: [PROJECTS_KEY],
         });
       },
     };
-  }, [queryClient, promptIds.length, showMessageExperimentsLogged, toast]);
+  }, [
+    queryClient,
+    promptIds.length,
+    storeExperiments,
+    toast,
+    updateOutputTraceId,
+  ]);
 
   const addAbortController = useCallback(
     (key: string, value: AbortController) => {
@@ -139,9 +145,10 @@ const useActionButtonActions = ({
   const { createCombinations, processCombination } =
     usePromptDatasetItemCombination({
       workspaceName,
-      isToStop,
+      isToStopRef,
       datasetItems,
       datasetName,
+      selectedRuleIds,
       addAbortController,
       deleteAbortController,
     });
@@ -149,6 +156,7 @@ const useActionButtonActions = ({
   const runAll = useCallback(async () => {
     resetState();
     setIsRunning(true);
+    clearCreatedExperiments();
 
     const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
 
@@ -161,21 +169,34 @@ const useActionButtonActions = ({
         processCombination(combination, logProcessor),
       () => {
         setIsRunning(false);
-        setIsToStop(false);
+        isToStopRef.current = false;
         abortControllersRef.current.clear();
       },
     );
   }, [
     resetState,
+    setIsRunning,
+    clearCreatedExperiments,
     createCombinations,
     processCombination,
     logProcessorHandlers,
   ]);
 
+  const navigateToExperiments = useCallback(() => {
+    if (createdExperiments.length > 0) {
+      navigate({
+        experimentIds: createdExperiments.map((e) => e.id),
+        datasetId: datasetId,
+      });
+    }
+  }, [createdExperiments, datasetId, navigate]);
+
   return {
     isRunning,
     runAll,
     stopAll,
+    createdExperiments,
+    navigateToExperiments,
   };
 };
 

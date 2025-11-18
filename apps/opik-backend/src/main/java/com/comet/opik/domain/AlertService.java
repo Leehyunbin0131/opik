@@ -66,7 +66,7 @@ public interface AlertService {
 
     Alert getById(UUID id);
 
-    List<Alert> findAllByWorkspaceAndEventType(String workspaceId, AlertEventType eventType);
+    List<Alert> findAllByWorkspaceAndEventTypes(String workspaceId, Set<AlertEventType> eventTypes);
 
     Alert getByIdAndWorkspace(UUID id, String workspaceId);
 
@@ -225,6 +225,45 @@ class AlertServiceImpl implements AlertService {
                           }
                         }
                     ]
+                    """,
+            AlertEventType.EXPERIMENT_FINISHED,
+            """
+                    [
+                        {
+                                "id": "0198c90e-3884-7fe6-9236-168acd26d4bb",
+                                "name": "opik-assistant-v1",
+                                "dataset_id": "0198c909-9294-7d3a-a3c2-7511f46a9ef0",
+                                "metadata": {
+                                    "model": "gpt-4o-mini",
+                                    "prompts": [
+                                        "You are an instructor for technical executives that want to extract value of AI models.\\n        If you know the answer to the question, respond by stating that it is possible to do what is being asked,\\n        but without going into technical details on how to do it.\\n        Make sure you include in your answer:\\n        - A description of the lifecycle of a machine learning model\\n        - Where in this lifecycle the current question is relevant\\n        - The business benefits of implementing the provided answer\\n        - An estimation of the time and cost of implementing the provided answer"
+                                    ]
+                                },
+                                "type": "regular"
+                            }
+                    ]
+                    """,
+            AlertEventType.TRACE_COST,
+            """
+                    {
+                      "event_type": "TRACE_COST",
+                      "metric_name": "trace:cost",
+                      "metric_value": "150.75",
+                      "threshold": "100.00",
+                      "window_seconds": "3600",
+                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb"
+                    }
+                    """,
+            AlertEventType.TRACE_LATENCY,
+            """
+                    {
+                      "event_type": "TRACE_LATENCY",
+                      "metric_name": "trace:latency",
+                      "metric_value": "5250.5000",
+                      "threshold": "5",
+                      "window_seconds": "1800",
+                      "project_ids": ""
+                    }
                     """));
 
     private static final Alert DUMMY_ALERT = Alert.builder()
@@ -243,7 +282,7 @@ class AlertServiceImpl implements AlertService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        var newAlert = prepareAlert(alert, userName);
+        var newAlert = prepareAlert(alert, userName, workspaceId);
 
         return EntityConstraintHandler
                 .handle(() -> saveAlert(newAlert, workspaceId))
@@ -265,7 +304,7 @@ class AlertServiceImpl implements AlertService {
                 .build();
 
         // Prepare new updated alert with the same ID
-        var newAlert = prepareAlert(alert, userName);
+        var newAlert = prepareAlert(alert, userName, workspaceId);
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             // Delete existing alert and all its related entities (triggers, trigger configs, webhook)
@@ -318,13 +357,17 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
-    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId +'-'+ $eventType", returnType = Alert.class, wrapperType = List.class)
-    public List<Alert> findAllByWorkspaceAndEventType(@NonNull String workspaceId, @NonNull AlertEventType eventType) {
-        log.info("Fetching all enabled alerts for workspace '{}', eventType '{}'", workspaceId, eventType);
+    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId +'-'+ $eventTypes", returnType = Alert.class, wrapperType = List.class)
+    public List<Alert> findAllByWorkspaceAndEventTypes(String workspaceId, @NonNull Set<AlertEventType> eventTypes) {
+        log.info("Fetching all enabled alerts for workspace '{}', eventTypes '{}'", workspaceId, eventTypes);
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
 
-            return alertDAO.findByWorkspaceAndEventType(workspaceId, eventType.getValue());
+            Set<String> eventTypeValues = eventTypes.stream()
+                    .map(AlertEventType::getValue)
+                    .collect(java.util.stream.Collectors.toSet());
+
+            return alertDAO.findByWorkspaceAndEventTypes(workspaceId, eventTypeValues);
         });
     }
 
@@ -475,7 +518,7 @@ class AlertServiceImpl implements AlertService {
         return new EntityAlreadyExistsException(new ErrorMessage(HttpStatus.SC_CONFLICT, ALERT_ALREADY_EXISTS));
     }
 
-    private Alert prepareAlert(Alert alert, String userName) {
+    private Alert prepareAlert(Alert alert, String userName, String workspaceId) {
         UUID id = alert.id() == null ? idGenerator.generateId() : alert.id();
         IdGenerator.validateVersion(id, "Alert");
 
@@ -507,6 +550,7 @@ class AlertServiceImpl implements AlertService {
                 .triggers(preparedTriggers)
                 .createdBy(Optional.ofNullable(alert.createdBy()).orElse(userName))
                 .lastUpdatedBy(userName)
+                .workspaceId(workspaceId)
                 .build();
     }
 

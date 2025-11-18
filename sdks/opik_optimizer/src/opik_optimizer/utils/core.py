@@ -27,8 +27,8 @@ from opik.api_objects.optimization import Optimization
 from .colbert import ColBERTv2
 
 if TYPE_CHECKING:
-    from opik_optimizer.optimizable_agent import OptimizableAgent
-    from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
+    from ..optimizable_agent import OptimizableAgent
+    from ..api_objects import chat_prompt
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
@@ -47,6 +47,7 @@ class OptimizationContextManager:
         objective_name: str,
         name: str | None = None,
         metadata: dict[str, Any] | None = None,
+        optimization_id: str | None = None,
     ):
         """
         Initialize the optimization context.
@@ -63,6 +64,7 @@ class OptimizationContextManager:
         self.objective_name = objective_name
         self.name = name
         self.metadata = metadata
+        self.optimization_id = optimization_id
         self.optimization: Optimization | None = None
 
     def __enter__(self) -> Optimization | None:
@@ -73,6 +75,7 @@ class OptimizationContextManager:
                 objective_name=self.objective_name,
                 name=self.name,
                 metadata=self.metadata,
+                optimization_id=self.optimization_id,
             )
 
             if self.optimization:
@@ -263,6 +266,7 @@ def optimization_context(
     objective_name: str,
     name: str | None = None,
     metadata: dict[str, Any] | None = None,
+    optimization_id: str | None = None,
 ) -> OptimizationContextManager:
     """
     Create a context manager for handling optimization lifecycle.
@@ -284,6 +288,7 @@ def optimization_context(
         objective_name=objective_name,
         name=name,
         metadata=metadata,
+        optimization_id=optimization_id,
     )
 
 
@@ -310,8 +315,27 @@ def get_optimization_run_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
+def get_trial_compare_url(
+    *, dataset_id: str | None, optimization_id: str | None, trial_ids: list[str]
+) -> str:
+    if dataset_id is None or optimization_id is None:
+        raise ValueError("dataset_id and optimization_id are required")
+    if not trial_ids:
+        raise ValueError("trial_ids must be a non-empty list")
+
+    opik_config = opik.config.get_from_user_inputs()
+    url_override = opik_config.url_override
+    base = ensure_ending_slash(url_override)
+
+    trials_query = urllib.parse.quote(json.dumps(trial_ids))
+    compare_path = (
+        f"optimizations/{optimization_id}/{dataset_id}/compare?trials={trials_query}"
+    )
+    return urllib.parse.urljoin(base, compare_path)
+
+
 def create_litellm_agent_class(
-    prompt: "ChatPrompt", optimizer_ref: Any = None
+    prompt: "chat_prompt.ChatPrompt", optimizer_ref: Any = None
 ) -> type["OptimizableAgent"]:
     """
     Create a LiteLLMAgent from a chat prompt.
@@ -330,7 +354,7 @@ def create_litellm_agent_class(
             optimizer = optimizer_ref
 
             def __init__(
-                self, prompt: "ChatPrompt", project_name: str | None = None
+                self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
             ) -> None:
                 # Get project_name from optimizer if available
                 if project_name is None and hasattr(self.optimizer, "project_name"):
@@ -352,7 +376,7 @@ def create_litellm_agent_class(
             optimizer = optimizer_ref
 
             def __init__(
-                self, prompt: "ChatPrompt", project_name: str | None = None
+                self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
             ) -> None:
                 # Get project_name from optimizer if available
                 if project_name is None and hasattr(self.optimizer, "project_name"):

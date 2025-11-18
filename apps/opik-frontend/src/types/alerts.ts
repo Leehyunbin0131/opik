@@ -6,11 +6,16 @@ export enum ALERT_EVENT_TYPE {
   prompt_committed = "prompt:committed",
   trace_guardrails_triggered = "trace:guardrails_triggered",
   prompt_deleted = "prompt:deleted",
+  experiment_finished = "experiment:finished",
+  trace_cost = "trace:cost",
+  trace_latency = "trace:latency",
 }
 
 export enum ALERT_TRIGGER_CONFIG_TYPE {
   "scope:project" = "scope:project",
   "threshold:feedback_score" = "threshold:feedback_score",
+  "threshold:cost" = "threshold:cost",
+  "threshold:latency" = "threshold:latency",
 }
 
 export enum ALERT_TYPE {

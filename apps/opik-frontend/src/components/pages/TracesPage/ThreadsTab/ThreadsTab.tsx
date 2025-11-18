@@ -16,6 +16,10 @@ import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
+import {
+  useMetricDateRangeWithQuery,
+  MetricDateRangeSelect,
+} from "@/components/pages-shared/traces/MetricDateRangeSelect";
 
 import {
   COLUMN_COMMENTS_ID,
@@ -73,6 +77,7 @@ import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -230,6 +235,16 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   projectId,
   projectName,
 }) => {
+  const truncationEnabled = useTruncationEnabled();
+
+  const {
+    dateRange,
+    handleDateRangeChange,
+    intervalStart,
+    intervalEnd,
+    minDate,
+    maxDate,
+  } = useMetricDateRangeWithQuery({});
   const [search = "", setSearch] = useQueryParam(
     "threads_search",
     StringParam,
@@ -303,6 +318,15 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
+
+  // Enable table data loading after initial render to allow users to change the date filter
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsTableDataEnabled(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const { data, isPending, refetch } = useThreadList(
     {
@@ -312,11 +336,15 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       page: page as number,
       size: size as number,
       search: search as string,
-      truncate: true,
+      truncate: truncationEnabled,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
     },
     {
+      enabled: isTableDataEnabled,
       placeholderData: keepPreviousData,
       refetchInterval: REFETCH_INTERVAL,
+      refetchOnMount: false,
     },
   );
 
@@ -329,9 +357,12 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       size: size as number,
       search: search as string,
       truncate: false,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
     },
     {
       enabled: false,
+      refetchOnMount: "always",
     },
   );
 
@@ -560,10 +591,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return <Loader />;
   }
 
-  if (noData && rows.length === 0 && page === 1) {
-    return <NoThreadsPage />;
-  }
-
   return (
     <>
       <PageBodyStickyContainer direction="horizontal" limitWidth>
@@ -601,6 +628,12 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             columnsToExport={columnsToExport}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
+          <MetricDateRangeSelect
+            value={dateRange}
+            onChangeValue={handleDateRangeChange}
+            minDate={minDate}
+            maxDate={maxDate}
+          />
           <TooltipWrapper content={`Refresh threads list`}>
             <Button
               variant="outline"
@@ -627,38 +660,47 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
-      <DataTable
-        columns={columns}
-        data={rows}
-        onRowClick={handleRowClick}
-        activeRowId={activeRowId ?? ""}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        rowHeight={height as ROW_HEIGHT}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        TableWrapper={PageBodyStickyTableWrapper}
-        stickyHeader
-        meta={meta}
-      />
-      <PageBodyStickyContainer
-        className="py-4"
-        direction="horizontal"
-        limitWidth
-      >
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={data?.total ?? 0}
-        ></DataTablePagination>
-      </PageBodyStickyContainer>
+
+      {noData && rows.length === 0 && page === 1 ? (
+        <NoThreadsPage />
+      ) : (
+        <>
+          <DataTable
+            columns={columns}
+            data={rows}
+            onRowClick={handleRowClick}
+            activeRowId={activeRowId ?? ""}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            getRowId={getRowId}
+            rowHeight={height as ROW_HEIGHT}
+            columnPinning={DEFAULT_COLUMN_PINNING}
+            noData={<DataTableNoData title={noDataText} />}
+            TableWrapper={PageBodyStickyTableWrapper}
+            stickyHeader
+            meta={meta}
+          />
+          <PageBodyStickyContainer
+            className="py-4"
+            direction="horizontal"
+            limitWidth
+          >
+            <DataTablePagination
+              page={page as number}
+              pageChange={setPage}
+              size={size as number}
+              sizeChange={setSize}
+              total={data?.total ?? 0}
+              supportsTruncation
+              truncationEnabled={truncationEnabled}
+            />
+          </PageBodyStickyContainer>
+        </>
+      )}
       <TraceDetailsPanel
         projectId={projectId}
         traceId={traceId!}

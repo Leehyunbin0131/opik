@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("gepa", reason="gepa package required for GEPA adapter tests")
+try:
+    import gepa  # noqa: F401
+except ImportError:
+    pytest.fail("gepa package is required for GEPA adapter tests")  # pragma: no cover
 
 
 class DummyMetricResult:
@@ -35,8 +38,11 @@ def test_adapter_evaluate_uses_metric(
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    from opik_optimizer.gepa_optimizer.adapter import OpikDataInst, OpikGEPAAdapter
-    from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
+    from opik_optimizer.algorithms.gepa_optimizer.adapter import (
+        OpikDataInst,
+        OpikGEPAAdapter,
+    )
+    from opik_optimizer import ChatPrompt
 
     prompt = ChatPrompt(system="Answer", user="{input}")
 
@@ -52,7 +58,7 @@ def test_adapter_evaluate_uses_metric(
             return "A"
 
     monkeypatch.setattr(
-        "opik_optimizer.gepa_optimizer.adapter.create_litellm_agent_class",
+        "opik_optimizer.algorithms.gepa_optimizer.adapter.create_litellm_agent_class",
         lambda _prompt, optimizer_ref=None: lambda prompt: DummyAgent(prompt),
     )
 

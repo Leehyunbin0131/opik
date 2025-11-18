@@ -16,6 +16,10 @@ import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
+import {
+  useMetricDateRangeWithQuery,
+  MetricDateRangeSelect,
+} from "@/components/pages-shared/traces/MetricDateRangeSelect";
 
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
@@ -99,6 +103,7 @@ import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -236,6 +241,16 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   projectId,
   projectName,
 }) => {
+  const truncationEnabled = useTruncationEnabled();
+
+  const {
+    dateRange,
+    handleDateRangeChange,
+    intervalStart,
+    intervalEnd,
+    minDate,
+    maxDate,
+  } = useMetricDateRangeWithQuery({});
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -401,9 +416,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
 
   const clearRowSelection = useCallback(() => {
     setRowSelection({});
+  }, []);
+
+  // Enable table data loading after initial render to allow users to change the date filter
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsTableDataEnabled(true);
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const { data, isPending, refetch } = useTracesOrSpansList(
@@ -415,10 +439,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       page: page as number,
       size: size as number,
       search: search as string,
-      truncate: true,
+      truncate: truncationEnabled,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
     },
     {
+      enabled: isTableDataEnabled,
       refetchInterval: REFETCH_INTERVAL,
+      refetchOnMount: false,
     },
   );
 
@@ -432,9 +460,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       size: size as number,
       search: search as string,
       truncate: false,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
     },
     {
       enabled: false,
+      refetchOnMount: "always",
     },
   );
 
@@ -445,6 +476,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         type: type as TRACE_DATA_TYPE,
         filters,
         search: search as string,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
       },
       {
         refetchInterval: REFETCH_INTERVAL,
@@ -851,10 +884,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return <Loader />;
   }
 
-  if (noData && rows.length === 0 && page === 1) {
-    return <NoTracesPage />;
-  }
-
   return (
     <>
       <PageBodyStickyContainer direction="horizontal" limitWidth>
@@ -896,6 +925,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             onClearSelection={clearRowSelection}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
+          <MetricDateRangeSelect
+            value={dateRange}
+            onChangeValue={handleDateRangeChange}
+            minDate={minDate}
+            maxDate={maxDate}
+          />
           <TooltipWrapper
             content={`Refresh ${
               type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
@@ -928,39 +963,47 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         </div>
       </PageBodyStickyContainer>
 
-      <DataTable
-        columns={columns}
-        columnsStatistic={columnsStatistic}
-        data={rows}
-        onRowClick={handleRowClick}
-        activeRowId={activeRowId ?? ""}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        rowHeight={height as ROW_HEIGHT}
-        columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        TableWrapper={PageBodyStickyTableWrapper}
-        stickyHeader
-        meta={meta}
-      />
-      <PageBodyStickyContainer
-        className="py-4"
-        direction="horizontal"
-        limitWidth
-      >
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={data?.total ?? 0}
-        ></DataTablePagination>
-      </PageBodyStickyContainer>
+      {noData && rows.length === 0 && page === 1 ? (
+        <NoTracesPage />
+      ) : (
+        <>
+          <DataTable
+            columns={columns}
+            columnsStatistic={columnsStatistic}
+            data={rows}
+            onRowClick={handleRowClick}
+            activeRowId={activeRowId ?? ""}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            getRowId={getRowId}
+            rowHeight={height as ROW_HEIGHT}
+            columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
+            noData={<DataTableNoData title={noDataText} />}
+            TableWrapper={PageBodyStickyTableWrapper}
+            stickyHeader
+            meta={meta}
+          />
+          <PageBodyStickyContainer
+            className="py-4"
+            direction="horizontal"
+            limitWidth
+          >
+            <DataTablePagination
+              page={page as number}
+              pageChange={setPage}
+              size={size as number}
+              sizeChange={setSize}
+              total={data?.total ?? 0}
+              supportsTruncation
+              truncationEnabled={truncationEnabled}
+            />
+          </PageBodyStickyContainer>
+        </>
+      )}
       <TraceDetailsPanel
         projectId={projectId}
         traceId={traceId!}

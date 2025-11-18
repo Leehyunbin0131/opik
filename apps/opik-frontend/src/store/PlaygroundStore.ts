@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
 
-import { PlaygroundPromptType } from "@/types/playground";
+import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
@@ -11,6 +11,7 @@ interface PlaygroundOutput {
   isLoading: boolean;
   value: string | null;
   stale: boolean;
+  traceId?: string;
 }
 
 interface PlaygroundOutputWithDatasetItem {
@@ -89,6 +90,9 @@ export type PlaygroundStore = {
   outputMap: PlaygroundOutputMap;
   datasetVariables: string[];
   providerValidationTrigger: number;
+  selectedRuleIds: string[] | null;
+  createdExperiments: LogExperiment[];
+  isRunning: boolean;
 
   setPromptMap: (
     promptIds: string[],
@@ -106,8 +110,17 @@ export type PlaygroundStore = {
     datasetItemId: string,
     changes: Partial<PlaygroundOutput>,
   ) => void;
+  updateOutputTraceId: (
+    promptId: string,
+    datasetItemId: string,
+    traceId: string,
+  ) => void;
   setDatasetVariables: (variables: string[]) => void;
   triggerProviderValidation: () => void;
+  setSelectedRuleIds: (ruleIds: string[] | null) => void;
+  setCreatedExperiments: (experiments: LogExperiment[]) => void;
+  clearCreatedExperiments: () => void;
+  setIsRunning: (isRunning: boolean) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -118,6 +131,9 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       outputMap: {},
       datasetVariables: [],
       providerValidationTrigger: 0,
+      selectedRuleIds: null,
+      createdExperiments: [],
+      isRunning: false,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -212,6 +228,26 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      updateOutputTraceId: (promptId, datasetItemId, traceId) => {
+        set((state) => {
+          const key = datasetItemId
+            ? [promptId, "datasetItemMap", datasetItemId]
+            : [promptId];
+
+          const output = get(state.outputMap, key);
+          if (!output) return state;
+
+          const newOutput = { ...output, traceId };
+          const newOutputMap = { ...state.outputMap };
+
+          lodashSet(newOutputMap, key, newOutput);
+
+          return {
+            ...state,
+            outputMap: newOutputMap,
+          };
+        });
+      },
       setDatasetVariables: (variables) => {
         set((state) => {
           return {
@@ -225,6 +261,38 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           return {
             ...state,
             providerValidationTrigger: state.providerValidationTrigger + 1,
+          };
+        });
+      },
+      setSelectedRuleIds: (ruleIds) => {
+        set((state) => {
+          return {
+            ...state,
+            selectedRuleIds: ruleIds,
+          };
+        });
+      },
+      setCreatedExperiments: (experiments) => {
+        set((state) => {
+          return {
+            ...state,
+            createdExperiments: experiments,
+          };
+        });
+      },
+      clearCreatedExperiments: () => {
+        set((state) => {
+          return {
+            ...state,
+            createdExperiments: [],
+          };
+        });
+      },
+      setIsRunning: (isRunning) => {
+        set((state) => {
+          return {
+            ...state,
+            isRunning,
           };
         });
       },
@@ -312,6 +380,18 @@ export const useResetOutputMap = () =>
 export const useUpdateOutput = () =>
   usePlaygroundStore((state) => state.updateOutput);
 
+export const useUpdateOutputTraceId = () =>
+  usePlaygroundStore((state) => state.updateOutputTraceId);
+
+export const useTraceIdByPromptDatasetItemId = (
+  promptId: string,
+  datasetItemId?: string,
+) => {
+  return (
+    useOutputByPromptDatasetItemId(promptId, datasetItemId)?.traceId ?? null
+  );
+};
+
 export const useDatasetVariables = () =>
   usePlaygroundStore((state) => state.datasetVariables);
 
@@ -323,5 +403,26 @@ export const useProviderValidationTrigger = () =>
 
 export const useTriggerProviderValidation = () =>
   usePlaygroundStore((state) => state.triggerProviderValidation);
+
+export const useSelectedRuleIds = () =>
+  usePlaygroundStore((state) => state.selectedRuleIds);
+
+export const useSetSelectedRuleIds = () =>
+  usePlaygroundStore((state) => state.setSelectedRuleIds);
+
+export const useCreatedExperiments = () =>
+  usePlaygroundStore((state) => state.createdExperiments);
+
+export const useSetCreatedExperiments = () =>
+  usePlaygroundStore((state) => state.setCreatedExperiments);
+
+export const useClearCreatedExperiments = () =>
+  usePlaygroundStore((state) => state.clearCreatedExperiments);
+
+export const useIsRunning = () =>
+  usePlaygroundStore((state) => state.isRunning);
+
+export const useSetIsRunning = () =>
+  usePlaygroundStore((state) => state.setIsRunning);
 
 export default usePlaygroundStore;

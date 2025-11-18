@@ -20,28 +20,37 @@ import { snakeCaseObj } from "@/lib/utils";
 import { createBatchProcessor } from "@/lib/batches";
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 import {
+  COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 import { parseCompletionOutput } from "@/lib/playground";
+import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
   datasetItemId?: string;
   datasetName: string | null;
   model: PROVIDER_MODEL_TYPE | "";
-  provider: PROVIDER_TYPE | "";
+  provider: COMPOSED_PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   configs: LLMPromptConfigsType;
+  selectedRuleIds: string[] | null;
+  datasetItemData?: object;
+}
+
+export interface TraceMapping {
+  traceId: string;
+  promptId: string;
+  datasetItemId?: string;
 }
 
 export interface LogProcessorArgs {
   onAddExperimentRegistry: (loggedExperiments: LogExperiment[]) => void;
   onError: (error: Error) => void;
-  onCreateTraces: (traces: LogTrace[]) => void;
+  onCreateTraces: (traces: LogTrace[], mappings: TraceMapping[]) => void;
 }
 
 export interface LogProcessor {
@@ -72,7 +81,6 @@ const createBatchExperimentItems = async (
   });
 };
 
-const PLAYGROUND_PROJECT_NAME = "playground";
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
 const USAGE_FIELDS_TO_SEND = [
   "completion_tokens",
@@ -81,18 +89,47 @@ const USAGE_FIELDS_TO_SEND = [
 ];
 
 const getTraceFromRun = (run: LogQueueParams): LogTrace => {
-  return {
+  const trace: LogTrace = {
     id: v7(),
     projectName: PLAYGROUND_PROJECT_NAME,
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
-    input: { messages: run.providerMessages },
+    input: {
+      messages: run.providerMessages,
+    },
     output: { output: parseCompletionOutput(run) },
   };
+
+  // Add selected_rule_ids to trace metadata if provided
+  if (run.selectedRuleIds && run.selectedRuleIds.length > 0) {
+    trace.metadata = {
+      ...trace.metadata,
+      selected_rule_ids: run.selectedRuleIds,
+    };
+  }
+
+  // Add dataset_item_data to trace metadata if provided
+  if (run.datasetItemData) {
+    trace.metadata = {
+      ...trace.metadata,
+      dataset_item_data: run.datasetItemData,
+    };
+  }
+
+  return trace;
+};
+
+const hasChoicesContent = (run: LogQueueParams): boolean => {
+  return !!run?.choices?.some((choice) => choice.delta.content);
 };
 
 const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
+  const spanOutput =
+    run.choices && hasChoicesContent(run)
+      ? { choices: run.choices }
+      : { output: run.result };
+
   return {
     id: v7(),
     traceId,
@@ -101,8 +138,10 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
-    input: { messages: run.providerMessages },
-    output: { choices: run.choices ? run.choices : [] },
+    input: {
+      messages: run.providerMessages,
+    },
+    output: spanOutput,
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
     model: run.model,
     provider: run.provider,
@@ -116,14 +155,21 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
 };
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
+  const experimentMetadata: Record<string, unknown> = {
+    model: run.model,
+    messages: JSON.stringify(run.providerMessages),
+    model_config: run.configs,
+  };
+
+  // Add selected_rule_ids to experiment metadata if provided
+  if (run.selectedRuleIds && run.selectedRuleIds.length > 0) {
+    experimentMetadata.selected_rule_ids = run.selectedRuleIds;
+  }
+
   return {
     id: v7(),
     datasetName: run.datasetName!,
-    metadata: {
-      model: run.model,
-      messages: JSON.stringify(run.providerMessages),
-      model_config: run.configs,
-    },
+    metadata: experimentMetadata,
     ...(run.promptLibraryVersions?.length && {
       prompt_versions: run.promptLibraryVersions,
     }),
@@ -152,6 +198,7 @@ const createLogPlaygroundProcessor = ({
 }: LogProcessorArgs): LogProcessor => {
   const experimentPromptMap: Record<string, string> = {};
   const experimentRegistry: LogExperiment[] = [];
+  const traceMappings: TraceMapping[] = [];
 
   const spanBatch = createBatchProcessor<LogSpan>(async (spans) => {
     try {
@@ -164,7 +211,7 @@ const createLogPlaygroundProcessor = ({
   const traceBatch = createBatchProcessor<LogTrace>(async (traces) => {
     try {
       await createBatchTraces(traces);
-      onCreateTraces(traces);
+      onCreateTraces(traces, traceMappings);
     } catch {
       onError(new Error("There has been an error with logging traces"));
     }
@@ -197,12 +244,19 @@ const createLogPlaygroundProcessor = ({
 
   return {
     log: (run: LogQueueParams) => {
-      const { promptId, datasetName } = run;
+      const { promptId, datasetName, datasetItemId } = run;
 
       const isWithExperiments = !!datasetName;
 
       const trace = getTraceFromRun(run);
       const span = getSpanFromRun(run, trace.id);
+
+      // Store the trace mapping
+      traceMappings.push({
+        traceId: trace.id,
+        promptId,
+        datasetItemId,
+      });
 
       traceBatch.addItem(trace);
       spanBatch.addItem(span);

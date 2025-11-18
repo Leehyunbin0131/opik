@@ -113,6 +113,14 @@ from .batch_delete import BatchDelete
 from .batch_delete_by_project import BatchDeleteByProject
 from .bi_information import BiInformation
 from .bi_information_response import BiInformationResponse
+from .boolean_feedback_definition import BooleanFeedbackDefinition
+from .boolean_feedback_definition_create import BooleanFeedbackDefinitionCreate
+from .boolean_feedback_definition_public import BooleanFeedbackDefinitionPublic
+from .boolean_feedback_definition_update import BooleanFeedbackDefinitionUpdate
+from .boolean_feedback_detail import BooleanFeedbackDetail
+from .boolean_feedback_detail_create import BooleanFeedbackDetailCreate
+from .boolean_feedback_detail_public import BooleanFeedbackDetailPublic
+from .boolean_feedback_detail_update import BooleanFeedbackDetailUpdate
 from .categorical_feedback_definition import CategoricalFeedbackDefinition
 from .categorical_feedback_definition_create import CategoricalFeedbackDefinitionCreate
 from .categorical_feedback_definition_public import CategoricalFeedbackDefinitionPublic
@@ -146,6 +154,8 @@ from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
+from .dashboard_page_public import DashboardPagePublic
+from .dashboard_public import DashboardPublic
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
@@ -202,15 +212,26 @@ from .experiment_public_type import ExperimentPublicType
 from .experiment_status import ExperimentStatus
 from .experiment_type import ExperimentType
 from .export_trace_service_request import ExportTraceServiceRequest
-from .feedback import Feedback, Feedback_Categorical, Feedback_Numerical
-from .feedback_create import FeedbackCreate, FeedbackCreate_Categorical, FeedbackCreate_Numerical
+from .feedback import Feedback, Feedback_Boolean, Feedback_Categorical, Feedback_Numerical
+from .feedback_create import (
+    FeedbackCreate,
+    FeedbackCreate_Boolean,
+    FeedbackCreate_Categorical,
+    FeedbackCreate_Numerical,
+)
 from .feedback_definition_page_public import FeedbackDefinitionPagePublic
 from .feedback_object_public import (
     FeedbackObjectPublic,
+    FeedbackObjectPublic_Boolean,
     FeedbackObjectPublic_Categorical,
     FeedbackObjectPublic_Numerical,
 )
-from .feedback_public import FeedbackPublic, FeedbackPublic_Categorical, FeedbackPublic_Numerical
+from .feedback_public import (
+    FeedbackPublic,
+    FeedbackPublic_Boolean,
+    FeedbackPublic_Categorical,
+    FeedbackPublic_Numerical,
+)
 from .feedback_score import FeedbackScore
 from .feedback_score_average import FeedbackScoreAverage
 from .feedback_score_average_detailed import FeedbackScoreAverageDetailed
@@ -228,7 +249,12 @@ from .feedback_score_names import FeedbackScoreNames
 from .feedback_score_public import FeedbackScorePublic
 from .feedback_score_public_source import FeedbackScorePublicSource
 from .feedback_score_source import FeedbackScoreSource
-from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
+from .feedback_update import (
+    FeedbackUpdate,
+    FeedbackUpdate_Boolean,
+    FeedbackUpdate_Categorical,
+    FeedbackUpdate_Numerical,
+)
 from .function import Function
 from .function_call import FunctionCall
 from .group_content import GroupContent
@@ -244,6 +270,7 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
+from .ids_holder import IdsHolder
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
 from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
@@ -348,6 +375,7 @@ from .score_name import ScoreName
 from .service_toggles_config import ServiceTogglesConfig
 from .span import Span
 from .span_batch import SpanBatch
+from .span_enrichment_options import SpanEnrichmentOptions
 from .span_experiment_item_bulk_write_view import SpanExperimentItemBulkWriteView
 from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
 from .span_filter_public import SpanFilterPublic
@@ -366,6 +394,7 @@ from .tool_call import ToolCall
 from .trace import Trace
 from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
+from .trace_enrichment_options import TraceEnrichmentOptions
 from .trace_experiment_item_bulk_write_view import TraceExperimentItemBulkWriteView
 from .trace_filter import TraceFilter
 from .trace_filter_operator import TraceFilterOperator
@@ -504,6 +533,14 @@ __all__ = [
     "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
+    "BooleanFeedbackDefinition",
+    "BooleanFeedbackDefinitionCreate",
+    "BooleanFeedbackDefinitionPublic",
+    "BooleanFeedbackDefinitionUpdate",
+    "BooleanFeedbackDetail",
+    "BooleanFeedbackDetailCreate",
+    "BooleanFeedbackDetailPublic",
+    "BooleanFeedbackDetailUpdate",
     "CategoricalFeedbackDefinition",
     "CategoricalFeedbackDefinitionCreate",
     "CategoricalFeedbackDefinitionPublic",
@@ -537,6 +574,8 @@ __all__ = [
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
     "CountValueStatPublic",
+    "DashboardPagePublic",
+    "DashboardPublic",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
@@ -593,13 +632,16 @@ __all__ = [
     "ExportTraceServiceRequest",
     "Feedback",
     "FeedbackCreate",
+    "FeedbackCreate_Boolean",
     "FeedbackCreate_Categorical",
     "FeedbackCreate_Numerical",
     "FeedbackDefinitionPagePublic",
     "FeedbackObjectPublic",
+    "FeedbackObjectPublic_Boolean",
     "FeedbackObjectPublic_Categorical",
     "FeedbackObjectPublic_Numerical",
     "FeedbackPublic",
+    "FeedbackPublic_Boolean",
     "FeedbackPublic_Categorical",
     "FeedbackPublic_Numerical",
     "FeedbackScore",
@@ -620,8 +662,10 @@ __all__ = [
     "FeedbackScorePublicSource",
     "FeedbackScoreSource",
     "FeedbackUpdate",
+    "FeedbackUpdate_Boolean",
     "FeedbackUpdate_Categorical",
     "FeedbackUpdate_Numerical",
+    "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
     "Function",
@@ -639,6 +683,7 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
+    "IdsHolder",
     "JsonListString",
     "JsonListStringCompare",
     "JsonListStringExperimentItemBulkWriteView",
@@ -741,6 +786,7 @@ __all__ = [
     "ServiceTogglesConfig",
     "Span",
     "SpanBatch",
+    "SpanEnrichmentOptions",
     "SpanExperimentItemBulkWriteView",
     "SpanExperimentItemBulkWriteViewType",
     "SpanFilterPublic",
@@ -759,6 +805,7 @@ __all__ = [
     "Trace",
     "TraceBatch",
     "TraceCountResponse",
+    "TraceEnrichmentOptions",
     "TraceExperimentItemBulkWriteView",
     "TraceFilter",
     "TraceFilterOperator",

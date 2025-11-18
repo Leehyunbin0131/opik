@@ -63,8 +63,8 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -88,7 +88,7 @@ import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 @DisplayName("Multi-value Feedback Scores Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-public class MultiValueFeedbackScoresE2ETest {
+class MultiValueFeedbackScoresE2ETest {
     private static final String API_KEY1 = randomUUID().toString();
     private static final String USER1 = randomUUID().toString();
     private static final String API_KEY2 = randomUUID().toString();
@@ -98,7 +98,7 @@ public class MultiValueFeedbackScoresE2ETest {
     private static final String EMPTY_REASON_PLACEHOLDER = "<no reason>";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
@@ -160,13 +160,15 @@ public class MultiValueFeedbackScoresE2ETest {
     @Test
     @DisplayName("test score trace by multiple authors")
     void testScoreTraceByMultipleAuthors() {
+        Instant traceStartTime = Instant.now().truncatedTo(ChronoUnit.HOURS);
+
         var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                 .map(trace -> trace.toBuilder()
                         .id(null)
                         .projectName(DEFAULT_PROJECT)
                         .usage(null)
                         .feedbackScores(null)
-                        .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                        .startTime(traceStartTime)
                         .build())
                 .toList();
         var trace1Id = traceResourceClient.createTrace(traces.getFirst(), API_KEY1, TEST_WORKSPACE);
@@ -233,7 +235,7 @@ public class MultiValueFeedbackScoresE2ETest {
 
         // assert feedback project metric
         assertProjectMetric(actualTrace1.projectId(), MetricType.FEEDBACK_SCORES, user1Score.name(),
-                List.of(user1Score.value(), user2Score.value()), anotherTraceScore.value());
+                List.of(user1Score.value(), user2Score.value()), anotherTraceScore.value(), traceStartTime);
     }
 
     @Test
@@ -476,13 +478,14 @@ public class MultiValueFeedbackScoresE2ETest {
         traceResourceClient.openTraceThread(threadId2, null, projectName, API_KEY1, TEST_WORKSPACE);
 
         // create traces within threads
+        Instant startTime = Instant.now().truncatedTo(ChronoUnit.HOURS);
         var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
                 .threadId(threadId1)
                 .projectName(projectName)
                 .usage(null)
                 .feedbackScores(null)
-                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .startTime(startTime)
                 .build();
         var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
@@ -490,7 +493,7 @@ public class MultiValueFeedbackScoresE2ETest {
                 .projectName(projectName)
                 .usage(null)
                 .feedbackScores(null)
-                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .startTime(startTime)
                 .build();
         var trace3 = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
@@ -498,7 +501,7 @@ public class MultiValueFeedbackScoresE2ETest {
                 .projectName(projectName)
                 .usage(null)
                 .feedbackScores(null)
-                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .startTime(startTime)
                 .build();
 
         traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), API_KEY1, TEST_WORKSPACE);
@@ -574,7 +577,7 @@ public class MultiValueFeedbackScoresE2ETest {
 
         // assert thread feedback project metric
         assertProjectMetric(projectId, MetricType.THREAD_FEEDBACK_SCORES, user1Score.name(),
-                List.of(user1Score.value(), user2Score.value()), anotherThreadScore.value());
+                List.of(user1Score.value(), user2Score.value()), anotherThreadScore.value(), startTime);
     }
 
     @Test
@@ -979,13 +982,14 @@ public class MultiValueFeedbackScoresE2ETest {
 
     private void assertProjectMetric(
             UUID projectId, MetricType metricType, String scoreName, List<BigDecimal> authoredValues,
-            BigDecimal otherValue) {
+            BigDecimal otherValue, Instant traceStartTime) {
         var projectMetrics = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
                 .metricType(metricType)
                 .interval(TimeInterval.HOURLY)
-                .intervalStart(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .intervalStart(traceStartTime)
                 .intervalEnd(Instant.now())
                 .build(), BigDecimal.class, API_KEY1, TEST_WORKSPACE);
+
         var scoreMetric = projectMetrics.results().stream()
                 .filter(predicate -> predicate.name().equals(scoreName)).findFirst()
                 .orElseThrow(() -> new AssertionError("Metric for score " + scoreName + " not found"));
