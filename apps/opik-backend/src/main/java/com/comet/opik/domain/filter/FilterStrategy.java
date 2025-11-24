@@ -14,6 +14,7 @@ public enum FilterStrategy {
     FEEDBACK_SCORES_IS_EMPTY,
     EXPERIMENT,
     PROMPT,
+    PROMPT_VERSION,
     DATASET,
     ANNOTATION_QUEUE,
     ALERT,
