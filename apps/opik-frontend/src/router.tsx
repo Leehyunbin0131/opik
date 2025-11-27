@@ -41,8 +41,8 @@ import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPag
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
 import OptimizationStudioPage from "@/components/pages/OptimizationStudioPage/OptimizationStudioPage";
 import OptimizationStudioRunPage from "@/components/pages/OptimizationStudioPage/OptimizationStudioRunPage";
-import AddEditAlertPage from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/AddEditAlertPage";
 import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper";
+import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
